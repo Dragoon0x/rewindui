@@ -1,5 +1,5 @@
 {
-  "name": "rewindui",
+  "name": "userewindui",
   "version": "0.1.0",
   "description": "Visual changelog for AI agent edits. Tracks every DOM mutation in real-time. Timeline scrubber, before/after diffs, accept/reject changes. Git blame for the visual layer.",
   "main": "dist/index.js",
