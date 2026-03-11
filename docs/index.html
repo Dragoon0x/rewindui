@@ -123,7 +123,7 @@
   <a href="#" class="topbar-logo"><div class="topbar-dot"></div>REWIND</a>
   <div class="topbar-right">
     <span class="topbar-shortcut">Alt + R</span>
-    <button class="topbar-btn" onclick="copyInstall()">npm install rewindui</button>
+    <button class="topbar-btn" onclick="copyInstall()">npm install userewindui</button>
   </div>
 </nav>
 
@@ -133,7 +133,7 @@
     <h1>Git blame for<br>the <span>visual layer</span></h1>
     <p class="hero-sub">Your AI agent just changed 15 things. What moved? What broke? Rewind tracks every DOM mutation in real-time. See before/after diffs. Accept or reject each change. Export the full changelog.</p>
     <div class="hero-install" onclick="copyInstall()">
-      <span>npm install rewindui</span>
+      <span>npm install userewindui</span>
       <span class="tag" id="copyTag">copy</span>
     </div>
   </section>
@@ -405,7 +405,7 @@ function handleAction(commitId, mutIndex, action) {
 renderCommits();
 
 function copyInstall() {
-  navigator.clipboard.writeText('npm install rewindui').then(() => {
+  navigator.clipboard.writeText('npm install userewindui').then(() => {
     const t = document.getElementById('copyTag');
     if (t) { t.textContent = 'copied!'; t.style.color = 'var(--bright)'; setTimeout(() => { t.textContent = 'copy'; t.style.color = '' }, 2000) }
   });
