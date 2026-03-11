@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REWIND — Visual changelog for AI agent edits</title>
+  <meta name="description" content="Track every DOM mutation your AI agent makes. Timeline scrubber, before/after diffs, accept or reject changes. Git blame for the visual layer.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --bg:#ffffff;--bg2:#f9f9f9;--bg3:#f3f3f3;
+      --border:#e8e8e8;--border2:#d0d0d0;
+      --dim:#999;--text:#555;--bright:#0a0a0a;--muted:#bbb;
+      --added:#16a34a;--addedBg:#f0fdf4;
+      --removed:#dc2626;--removedBg:#fef2f2;
+      --changed:#2563eb;--changedBg:#eff6ff;
+      --pending:#ca8a04;
+      --mono:'JetBrains Mono',monospace;
+      --sans:'Inter',-apple-system,sans-serif;
+    }
+    html{scroll-behavior:smooth}
+    body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.7;font-size:15px;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+    ::selection{background:rgba(0,0,0,.07)}
+
+    .topbar{position:fixed;top:0;left:0;right:0;z-index:100;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;backdrop-filter:blur(20px);background:rgba(255,255,255,.88);border-bottom:1px solid var(--border)}
+    .topbar-logo{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--bright);text-decoration:none;display:flex;align-items:center;gap:8px}
+    .topbar-dot{width:5px;height:5px;border-radius:50%;background:var(--bright)}
+    .topbar-right{display:flex;gap:10px;align-items:center}
+    .topbar-btn{font-family:var(--mono);font-size:9px;padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--dim);cursor:pointer;text-transform:uppercase;letter-spacing:.06em;transition:all .2s}
+    .topbar-btn:hover{border-color:var(--bright);color:var(--bright)}
+    .topbar-shortcut{font-family:var(--mono);font-size:9px;color:var(--dim);padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg2)}
+
+    .container{max-width:680px;margin:0 auto;padding:0 28px;position:relative;z-index:1}
+
+    .hero{padding:200px 0 100px;text-align:center}
+    .hero-badge{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.3em;color:var(--dim);margin-bottom:32px;opacity:0;animation:fi .6s ease forwards .2s}
+    .hero h1{font-size:clamp(40px,7vw,60px);font-weight:700;line-height:1.08;color:var(--bright);margin-bottom:24px;letter-spacing:-.02em;opacity:0;animation:fu .8s ease forwards .35s}
+    .hero h1 span{color:var(--dim)}
+    .hero-sub{font-size:16px;font-weight:400;color:var(--dim);max-width:440px;margin:0 auto 44px;line-height:1.7;opacity:0;animation:fu .7s ease forwards .55s}
+    .hero-install{display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--text);padding:10px 18px;border:1px solid var(--border);border-radius:8px;background:var(--bg);cursor:pointer;transition:all .2s;opacity:0;animation:fu .6s ease forwards .7s}
+    .hero-install:hover{border-color:var(--bright);color:var(--bright);box-shadow:0 2px 12px rgba(0,0,0,.06)}
+    .hero-install .tag{font-size:8px;color:var(--muted);border:1px solid var(--border);padding:1px 5px;border-radius:3px}
+
+    @keyframes fi{from{opacity:0}to{opacity:1}}
+    @keyframes fu{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+    section{padding:64px 0;border-top:1px solid var(--border)}
+    section h2{font-size:26px;font-weight:600;color:var(--bright);margin-bottom:10px;letter-spacing:-.01em}
+    section p{color:var(--text);font-size:14.5px;margin-bottom:16px;line-height:1.75}
+    section p code{font-family:var(--mono);font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:4px;border:1px solid var(--border);color:var(--bright)}
+
+    pre{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 20px;overflow-x:auto;margin:0 0 20px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text)}
+    pre .kw{color:var(--bright);font-weight:500}
+    pre .fn{color:#555}
+    pre .str{color:#777}
+    pre .cmt{color:var(--muted);font-style:italic}
+    pre .comp{color:var(--bright);font-weight:600}
+
+    /* ─── Interactive Demo ────────── */
+    .demo{margin:28px 0}
+    .demo-label{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px}
+
+    /* Simulated timeline panel (dark — matches real tool) */
+    .sim{background:#0a0a0e;border:1px solid #1c1c24;border-radius:10px;overflow:hidden;font-family:var(--mono);font-size:10px;color:#909098;box-shadow:0 4px 24px rgba(0,0,0,.1)}
+    .sim-header{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid #1c1c24;background:rgba(0,0,0,.2)}
+    .sim-header-left{display:flex;align-items:center;gap:8px}
+    .sim-header-left .title{font-weight:600;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#e0e0e8}
+    .sim-rec{width:14px;height:14px;border-radius:50%;background:rgba(248,113,113,.12);border:1px solid #f87171;display:flex;align-items:center;justify-content:center}
+    .sim-rec-dot{width:5px;height:5px;border-radius:50%;background:#f87171;animation:pulse 1.2s ease infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .sim-header-right{display:flex;gap:4px}
+    .sim-badge{font-size:7px;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:3px}
+    .sim-badge .dot{width:4px;height:4px;border-radius:50%}
+    .sim-body{display:flex;min-height:200px}
+    .sim-commits{padding:8px;border-right:1px solid #1c1c24;min-width:200px;display:flex;flex-direction:column;gap:4px;overflow:auto}
+    .sim-detail{flex:1;padding:10px;overflow:auto}
+
+    .sim-chip{padding:6px 10px;background:#111116;border:1px solid #1c1c24;border-radius:6px;cursor:pointer;text-align:left;transition:all .15s}
+    .sim-chip.active{border-color:#818cf8;background:rgba(129,140,248,.06)}
+    .sim-chip-top{display:flex;align-items:center;gap:5px;margin-bottom:2px}
+    .sim-chip-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+    .sim-chip-label{font-size:9px;color:#e0e0e8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+    .sim-chip-meta{font-size:8px;color:#505060;padding-left:10px}
+
+    .sim-mutation{background:#111116;border:1px solid #1c1c24;border-radius:6px;margin-bottom:4px;overflow:hidden}
+    .sim-mutation-header{display:flex;align-items:center;gap:6px;padding:6px 8px;cursor:pointer}
+    .sim-mutation-kind{padding:1px 5px;border-radius:3px;font-size:7px;text-transform:uppercase;letter-spacing:.06em}
+    .sim-mutation-sel{color:#e0e0e8;font-size:10px}
+    .sim-mutation-diff{padding:0 8px 8px;border-top:1px solid #1c1c24}
+    .diff-line{display:flex;gap:4px;padding:2px 6px;margin-top:3px;border-radius:3px;font-size:9px;line-height:1.5}
+    .diff-removed{background:rgba(248,113,113,.08);color:#f87171}
+    .diff-added{background:rgba(74,222,128,.08);color:#4ade80}
+
+    .sim-actions{display:flex;gap:3px;margin-left:auto}
+    .sim-action{width:18px;height:16px;display:flex;align-items:center;justify-content:center;border-radius:3px;border:1px solid;font-size:8px;cursor:pointer;background:transparent}
+    .sim-action.accept{color:#4ade80;border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.06)}
+    .sim-action.reject{color:#f87171;border-color:rgba(248,113,113,.25);background:rgba(248,113,113,.06)}
+
+    .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0 24px}
+    .feat-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
+    .feat-card-icon{font-size:20px;margin-bottom:6px;filter:grayscale(1);opacity:.5}
+    .feat-card h4{font-family:var(--mono);font-size:10px;color:var(--bright);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+    .feat-card p{font-size:10.5px;color:var(--dim);line-height:1.5;margin:0}
+
+    .tbl{width:100%;border-collapse:separate;border-spacing:0;margin:14px 0 20px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+    .tbl th,.tbl td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);font-size:12px}
+    .tbl th{background:var(--bg2);font-family:var(--mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+    .tbl td:first-child{font-family:var(--mono);color:var(--bright);font-size:11px;font-weight:500}
+    .tbl td:nth-child(2){font-family:var(--mono);color:var(--dim);font-size:10.5px}
+    .tbl tr:last-child td{border-bottom:none}
+
+    footer{border-top:1px solid var(--border);padding:44px 0;text-align:center}
+    footer p{color:var(--muted);font-size:12px}
+    @media(max-width:640px){.container{padding:0 16px}.hero{padding:140px 0 60px}.feat-grid{grid-template-columns:1fr}.sim-body{flex-direction:column}.sim-commits{min-width:0;border-right:none;border-bottom:1px solid #1c1c24;flex-direction:row;overflow-x:auto}}
+  </style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="#" class="topbar-logo"><div class="topbar-dot"></div>REWIND</a>
+  <div class="topbar-right">
+    <span class="topbar-shortcut">Alt + R</span>
+    <button class="topbar-btn" onclick="copyInstall()">npm install rewindui</button>
+  </div>
+</nav>
+
+<div class="container">
+  <section class="hero" style="border:none">
+    <div class="hero-badge">Open Source npm Package</div>
+    <h1>Git blame for<br>the <span>visual layer</span></h1>
+    <p class="hero-sub">Your AI agent just changed 15 things. What moved? What broke? Rewind tracks every DOM mutation in real-time. See before/after diffs. Accept or reject each change. Export the full changelog.</p>
+    <div class="hero-install" onclick="copyInstall()">
+      <span>npm install rewindui</span>
+      <span class="tag" id="copyTag">copy</span>
+    </div>
+  </section>
+
+  <!-- Interactive Demo -->
+  <section>
+    <h2>What it looks like</h2>
+    <p>This is a simulated timeline panel. Click the commits on the left to see mutations. Click the accept/reject buttons on individual changes. This is exactly what you see docked to the bottom of your app.</p>
+
+    <div class="demo">
+      <div class="demo-label">Simulated rewind panel</div>
+      <div class="sim">
+        <div class="sim-header">
+          <div class="sim-header-left">
+            <span class="title">REWIND</span>
+            <div class="sim-rec"><div class="sim-rec-dot"></div></div>
+            <span style="color:#505060;font-size:9px">12 changes</span>
+          </div>
+          <div class="sim-header-right">
+            <span class="sim-badge" style="color:#ca8a04"><span class="dot" style="background:#ca8a04;opacity:.5"></span>5</span>
+            <span class="sim-badge" style="color:#4ade80"><span class="dot" style="background:#4ade80;opacity:.5"></span>4</span>
+            <span class="sim-badge" style="color:#f87171"><span class="dot" style="background:#f87171;opacity:.5"></span>3</span>
+          </div>
+        </div>
+        <div class="sim-body">
+          <div class="sim-commits" id="commitList"></div>
+          <div class="sim-detail" id="detailPanel">
+            <div style="color:#505060;text-align:center;padding-top:60px;font-size:10px">Select a commit to inspect</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>One component</h2>
+    <p>Drop it next to your app. It starts recording immediately. Every DOM mutation gets captured with its selector, before/after value, and full undo data.</p>
+<pre>&lt;<span class="comp">Rewind</span> /&gt;
+
+<span class="cmt">// Add it alongside your app.</span>
+<span class="kw">function</span> <span class="fn">App</span>() {
+  <span class="kw">return</span> (
+    &lt;&gt;
+      &lt;<span class="fn">YourApp</span> /&gt;
+      &lt;<span class="comp">Rewind</span> /&gt;
+    &lt;/&gt;
+  )
+}</pre>
+  </section>
+
+  <section>
+    <h2>What gets tracked</h2>
+    <p>Four mutation types cover every change an AI agent can make to your UI.</p>
+    <div class="feat-grid">
+      <div class="feat-card"><div class="feat-card-icon">◨</div><h4>Style</h4><p>Inline style changes. Colors, spacing, layout, transforms, opacity.</p></div>
+      <div class="feat-card"><div class="feat-card-icon">≡</div><h4>Attribute</h4><p>Class changes, data attributes, aria states, src, href.</p></div>
+      <div class="feat-card"><div class="feat-card-icon">T</div><h4>Text</h4><p>Content edits. Headings, paragraphs, button labels, placeholders.</p></div>
+      <div class="feat-card"><div class="feat-card-icon">+−</div><h4>DOM</h4><p>Added and removed elements. New sections, deleted components, restructured trees.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Accept and reject</h2>
+    <p>Every mutation gets accept/reject buttons. Reject reverts the change in the live DOM. Accept marks it as approved. You can act on entire commits or individual mutations. Partial accepts are supported: keep the color change, reject the font change.</p>
+<pre><span class="cmt">// Programmatic control</span>
+<span class="kw">const</span> { acceptCommit, rejectCommit, stats } = <span class="fn">useRewind</span>()
+
+<span class="cmt">// Accept everything the agent did</span>
+<span class="fn">acceptAll</span>()
+
+<span class="cmt">// Reject a specific commit and revert its DOM changes</span>
+<span class="fn">rejectCommit</span>(commitId)
+
+<span class="cmt">// Export the full changelog</span>
+<span class="kw">const</span> md = <span class="fn">exportMarkdown</span>()</pre>
+  </section>
+
+  <section>
+    <h2>Smart grouping</h2>
+    <p>Mutations within a 500ms window are automatically grouped into a single commit. When an agent updates a component, the style change, class change, and text edit all appear together. Each commit gets an auto-generated label based on what changed and where.</p>
+  </section>
+
+  <section>
+    <h2>Export the changelog</h2>
+    <p>One click exports the full session as structured markdown or JSON. The output includes every commit, every mutation, selectors, before/after values, and accept/reject status. Paste it into your agent to explain what was approved and what needs to be redone.</p>
+<pre style="font-size:10.5px;line-height:1.55">## ✓ Style: button.primary (2:14:32 PM)
+
+### ✓ `button.primary` — style
+- **Before:** `background-color: #3b82f6; padding: 8px 16px`
+- **After:** `background-color: #6366f1; padding: 12px 24px`
+- **Selector:** `.hero > .cta-row > button.primary`
+
+## ✗ Text: h1 (2:14:33 PM)
+
+### ✗ `h1` — text
+- **Before:** `Ship faster with our platform`
+- **After:** `Deploy at the speed of thought`
+- **Selector:** `.hero > h1`</pre>
+  </section>
+
+  <section>
+    <h2>Props</h2>
+    <table class="tbl">
+      <thead><tr><th>Prop</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>recording</td><td>true</td><td>Start recording on mount</td></tr>
+        <tr><td>position</td><td>'bottom'</td><td>Panel: bottom, right, or left</td></tr>
+        <tr><td>panelSize</td><td>280</td><td>Height (bottom) or width (sides)</td></tr>
+        <tr><td>shortcut</td><td>'Alt+R'</td><td>Keyboard toggle</td></tr>
+        <tr><td>commitWindow</td><td>500</td><td>Group mutations within this ms window</td></tr>
+        <tr><td>maxCommits</td><td>200</td><td>Max commits in history</td></tr>
+        <tr><td>ignoreSelectors</td><td>['[data-rewind-ui]']</td><td>Ignore mutations in these selectors</td></tr>
+        <tr><td>onCommitAction</td><td>—</td><td>Callback on accept/reject</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Disclaimer</h2>
+    <p>Experimental, open-source software. Provided as-is with no warranties. DYOR. Use at your own risk. The author assumes zero liability.</p>
+  </section>
+
+  <footer><p>Built by 0xDragoon. Open source under MIT. Experimental software. DYOR.</p></footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// SIMULATED TIMELINE DEMO
+// ═══════════════════════════════════════════════
+
+const commits = [
+  {
+    id: 'c1', label: 'Style: button.primary', time: '2:14:32 PM', status: 'accepted', dot: '#4ade80',
+    mutations: [
+      { kind: 'style', kindColor: '#60a5fa', sel: 'button.primary', attr: '.style', status: '✓', statusColor: '#4ade80',
+        before: 'background-color: #3b82f6; padding: 8px 16px; border-radius: 6px',
+        after: 'background-color: #6366f1; padding: 12px 24px; border-radius: 8px' },
+      { kind: 'attribute', kindColor: '#818cf8', sel: 'button.primary', attr: '.class', status: '✓', statusColor: '#4ade80',
+        before: 'btn btn-blue',
+        after: 'btn btn-indigo btn-lg' },
+    ]
+  },
+  {
+    id: 'c2', label: 'Text: h1', time: '2:14:33 PM', status: 'rejected', dot: '#f87171',
+    mutations: [
+      { kind: 'text', kindColor: '#4ade80', sel: 'h1.hero-title', attr: null, status: '✗', statusColor: '#f87171',
+        before: 'Ship faster with our platform',
+        after: 'Deploy at the speed of thought' },
+    ]
+  },
+  {
+    id: 'c3', label: '3 changes to .card', time: '2:14:35 PM', status: 'pending', dot: '#fbbf24',
+    mutations: [
+      { kind: 'style', kindColor: '#60a5fa', sel: 'div.card', attr: '.style', status: '○', statusColor: '#505060',
+        before: 'box-shadow: none; border: 1px solid #e5e5e5',
+        after: 'box-shadow: 0 4px 12px rgba(0,0,0,.08); border: 1px solid #d4d4d4' },
+      { kind: 'text', kindColor: '#4ade80', sel: 'div.card > p', attr: null, status: '○', statusColor: '#505060',
+        before: 'Get started in minutes.',
+        after: 'Get started in seconds.' },
+      { kind: 'childList', kindColor: '#fbbf24', sel: 'div.card', attr: null, status: '○', statusColor: '#505060',
+        before: null,
+        after: '<span.badge> "New"' },
+    ]
+  },
+  {
+    id: 'c4', label: 'Added to .nav', time: '2:14:38 PM', status: 'accepted', dot: '#4ade80',
+    mutations: [
+      { kind: 'childList', kindColor: '#fbbf24', sel: 'nav.topnav', attr: null, status: '✓', statusColor: '#4ade80',
+        before: null,
+        after: '<a.nav-link> "Pricing"' },
+    ]
+  },
+  {
+    id: 'c5', label: 'Style: .sidebar', time: '2:14:40 PM', status: 'pending', dot: '#fbbf24',
+    mutations: [
+      { kind: 'style', kindColor: '#60a5fa', sel: 'aside.sidebar', attr: '.style', status: '○', statusColor: '#505060',
+        before: 'width: 240px; background: #fff',
+        after: 'width: 280px; background: #fafafa' },
+      { kind: 'attribute', kindColor: '#818cf8', sel: 'aside.sidebar', attr: '.class', status: '○', statusColor: '#505060',
+        before: 'sidebar',
+        after: 'sidebar sidebar-expanded' },
+    ]
+  },
+];
+
+let activeCommit = null;
+
+function renderCommits() {
+  const list = document.getElementById('commitList');
+  list.innerHTML = commits.map(c => `
+    <div class="sim-chip ${activeCommit === c.id ? 'active' : ''}" onclick="selectCommit('${c.id}')">
+      <div class="sim-chip-top">
+        <span class="sim-chip-dot" style="background:${c.dot}"></span>
+        <span class="sim-chip-label">${c.label}</span>
+      </div>
+      <div class="sim-chip-meta">${c.time} · ${c.mutations.length} mutation${c.mutations.length > 1 ? 's' : ''}</div>
+    </div>
+  `).join('');
+}
+
+function selectCommit(id) {
+  activeCommit = activeCommit === id ? null : id;
+  renderCommits();
+  renderDetail();
+}
+
+function renderDetail() {
+  const panel = document.getElementById('detailPanel');
+  if (!activeCommit) {
+    panel.innerHTML = '<div style="color:#505060;text-align:center;padding-top:60px;font-size:10px">Select a commit to inspect</div>';
+    return;
+  }
+
+  const c = commits.find(x => x.id === activeCommit);
+  if (!c) return;
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+      <span style="width:7px;height:7px;border-radius:50%;background:${c.dot}"></span>
+      <span style="color:#e0e0e8;font-size:11px;font-weight:500">${c.label}</span>
+      <span style="color:#505060;font-size:8px">${c.mutations.length} mutation${c.mutations.length > 1 ? 's' : ''}</span>
+    </div>
+    ${c.mutations.map((m, i) => `
+      <div class="sim-mutation">
+        <div class="sim-mutation-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <span style="color:${m.statusColor};font-size:9px">${m.status}</span>
+          <span class="sim-mutation-kind" style="background:${m.kindColor}18;color:${m.kindColor}">${m.kind}</span>
+          <span class="sim-mutation-sel">${m.sel}</span>
+          ${m.attr ? `<span style="color:#505060;font-size:9px">${m.attr}</span>` : ''}
+          ${m.status === '○' ? `
+            <div class="sim-actions">
+              <div class="sim-action accept" onclick="event.stopPropagation();handleAction('${c.id}',${i},'accept')">✓</div>
+              <div class="sim-action reject" onclick="event.stopPropagation();handleAction('${c.id}',${i},'reject')">✗</div>
+            </div>
+          ` : ''}
+        </div>
+        <div class="sim-mutation-diff">
+          ${m.before !== null ? `<div class="diff-line diff-removed"><span style="font-weight:600;flex-shrink:0">−</span><span>${m.before}</span></div>` : ''}
+          ${m.after !== null ? `<div class="diff-line diff-added"><span style="font-weight:600;flex-shrink:0">+</span><span>${m.after}</span></div>` : ''}
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function handleAction(commitId, mutIndex, action) {
+  const c = commits.find(x => x.id === commitId);
+  if (!c) return;
+  const m = c.mutations[mutIndex];
+  if (!m) return;
+
+  if (action === 'accept') {
+    m.status = '✓'; m.statusColor = '#4ade80';
+  } else {
+    m.status = '✗'; m.statusColor = '#f87171';
+  }
+
+  // Update commit status
+  const statuses = c.mutations.map(x => x.status);
+  if (statuses.every(s => s === '✓')) { c.status = 'accepted'; c.dot = '#4ade80'; }
+  else if (statuses.every(s => s === '✗')) { c.status = 'rejected'; c.dot = '#f87171'; }
+  else if (statuses.includes('○')) { c.status = 'pending'; c.dot = '#fbbf24'; }
+  else { c.status = 'partial'; c.dot = '#60a5fa'; }
+
+  renderCommits();
+  renderDetail();
+}
+
+renderCommits();
+
+function copyInstall() {
+  navigator.clipboard.writeText('npm install rewindui').then(() => {
+    const t = document.getElementById('copyTag');
+    if (t) { t.textContent = 'copied!'; t.style.color = 'var(--bright)'; setTimeout(() => { t.textContent = 'copy'; t.style.color = '' }, 2000) }
+  });
+}
+</script>
+</body>
+</html>
