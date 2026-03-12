@@ -61,9 +61,6 @@ Mutations within a 500ms window become one commit. Style change + class change +
 
 ## Accept and reject
 
-<<<<<<< HEAD
-Every mutation has accept/reject. Reject reverts the DOM. Accept marks it done. Partial accepts supported. Undo is best-effort.
-=======
 Every mutation has accept/reject buttons. Reject attempts to revert the change in the live DOM by restoring the old attribute value, old text content, or re-adding removed nodes. Accept marks the change as approved. You can act on entire commits or individual mutations. Partial accepts are supported.
 
 Undo is best-effort. If the element has been removed from the DOM since the mutation was recorded, Rewind tries to find it by selector. If the element can't be found, the mutation is marked as rejected but not reverted.
@@ -82,7 +79,6 @@ One click exports the full session as structured markdown or JSON. The output in
 ```
 
 Paste the export into your agent to explain what was approved and what needs to be redone.
->>>>>>> a4d79ca6307cb4be3c05eb6e0e18cf4ed8f5e839
 
 ## Programmatic API
 
