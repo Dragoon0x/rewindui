@@ -1,7 +1,7 @@
 {
   "name": "userewindui",
-  "version": "0.1.0",
-  "description": "Visual changelog for AI agent edits. Tracks every DOM mutation in real-time. Timeline scrubber, before/after diffs, accept/reject changes. Git blame for the visual layer.",
+  "version": "1.0.0",
+  "description": "Visual changelog for AI agent edits. Tracks every DOM mutation. Visual overlays on changed elements, DOM snapshots, smart commit labels, timeline scrubber, before/after diffs, accept/reject with undo, annotations, session persistence, impact scoring. Git blame for the visual layer.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -14,8 +14,8 @@
   },
   "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean --minify",
-    "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --minify --external react --external react-dom",
+    "dev": "tsup src/index.ts --format esm,cjs --dts --watch --external react --external react-dom",
     "test": "node test/run.js",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"
@@ -35,7 +35,7 @@
   "keywords": [
     "rewind", "visual-diff", "dom-observer", "changelog", "ai-agent",
     "mutation", "before-after", "timeline", "undo", "cursor",
-    "claude-code", "copilot", "devtools", "react"
+    "claude-code", "copilot", "devtools", "react", "overlays", "snapshots"
   ],
   "author": "0xDragoon",
   "license": "MIT",

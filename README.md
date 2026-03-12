@@ -5,15 +5,15 @@
 Visual changelog for AI agent edits. Git blame for the visual layer.
 
 ```
-npm install rewindui
+npm install userewindui
 ```
 
-Your AI agent just rewrote half a component. What actually changed? What broke? Rewind watches every DOM mutation in real-time, groups them into commits, shows before/after diffs, and lets you accept or reject each change individually. Reject reverts the DOM. Accept marks it done. Export the full changelog as markdown for your agent.
+Your AI agent just rewrote half a component. What actually changed? What broke? Rewind watches every DOM mutation in real-time, groups them into smart commits, shows before/after diffs, and lets you accept or reject each change. Reject reverts the DOM. Accept marks it done. Export as markdown, JSON, or agent instructions.
 
 ## Quick start
 
 ```jsx
-import { Rewind } from 'rewindui'
+import { Rewind } from 'userewindui'
 
 function App() {
   return (
@@ -25,91 +25,80 @@ function App() {
 }
 ```
 
-Rewind starts recording immediately. A timeline panel docks to the bottom of your viewport. Every DOM mutation appears as a commit with before/after diffs and accept/reject controls.
-
 Press `Alt+R` to toggle the panel.
+
+## What's new in v1
+
+**Smart commit labels.** Rewind auto-generates human-readable descriptions. "Color change on div.hero", "Expanded text in h1", "Updated source on img" instead of raw mutation data.
+
+**Impact scoring.** Every mutation gets a 0-1 impact score based on viewport area affected. Commits that change large elements rank higher.
+
+**Annotations.** Add notes to any commit explaining why you accepted or rejected it. Notes are included in exports.
+
+**Batch operations.** Accept all style changes at once. Reject all text changes. Filter by type, status, or search.
+
+**Session persistence.** Opt-in localStorage persistence. Resume your review after a page refresh.
+
+**DOM snapshots.** Capture the full page state at any point. Compare between snapshots.
+
+**Agent export format.** New `<dom_changes>` export block groups approved and rejected changes for your AI agent.
+
+**Search.** Find changes by selector, value, label, or annotation text.
 
 ## What gets tracked
 
-Four mutation types cover everything:
+**Style** changes to inline styles. Colors, spacing, layout, transforms.
 
-**Style** changes to inline styles. Colors, spacing, layout, transforms, opacity. Before and after values are captured as the full style string.
+**Attribute** changes. Classes, data attributes, ARIA states, src, href.
 
-**Attribute** changes. Class additions/removals, data attributes, aria states, src, href, any HTML attribute. The old and new values are stored.
+**Text** changes. Content edits to headings, paragraphs, button labels.
 
-**Text** changes. Content edits to headings, paragraphs, button labels, any text node. Shows the exact string diff.
-
-**DOM** changes. Added and removed elements. New sections, deleted components, restructured trees. Captures the selector of added nodes and the HTML of removed nodes for undo.
+**DOM** changes. Added and removed elements. Full HTML captured for undo.
 
 ## Smart grouping
 
-Mutations within a 500ms window are automatically grouped into a single commit. When an agent updates a component, the style change, class change, and text edit all appear as one logical unit. Each commit gets an auto-generated label based on what changed and where.
+Mutations within a 500ms window become one commit. Style change + class change + text edit = one logical unit. Each commit gets an auto-generated label.
 
 ## Accept and reject
 
-Every mutation has accept/reject buttons. Reject attempts to revert the change in the live DOM by restoring the old attribute value, old text content, or re-adding removed nodes. Accept marks the change as approved. You can act on entire commits or individual mutations. Partial accepts are supported.
-
-Undo is best-effort. If the element has been removed from the DOM since the mutation was recorded, Rewind tries to find it by selector. If the element can't be found, the mutation is marked as rejected but not reverted.
-
-## Export
-
-One click exports the full session as structured markdown or JSON. The output includes every commit, every mutation with selectors, before/after values, and accept/reject status.
-
-```markdown
-## ✓ Style: button.primary (2:14:32 PM)
-
-### ✓ `button.primary` — style
-- **Before:** `background-color: #3b82f6; padding: 8px 16px`
-- **After:** `background-color: #6366f1; padding: 12px 24px`
-- **Selector:** `.hero > .cta-row > button.primary`
-```
-
-Paste the export into your agent to explain what was approved and what needs to be redone.
+Every mutation has accept/reject. Reject reverts the DOM. Accept marks it done. Partial accepts supported. Undo is best-effort.
 
 ## Programmatic API
 
 ```jsx
-import { useRewind } from 'rewindui'
+import { useRewind } from 'userewindui'
 
 const {
-  state,        // Full timeline state
-  commits,      // Array of commits
-  stats,        // { total, pending, accepted, rejected }
-  acceptCommit, // (commitId) => void
-  rejectCommit, // (commitId) => void — also reverts DOM
-  acceptAll,    // () => void
-  clear,        // () => void
-  exportMarkdown,
-  exportJSON,
+  state, commits, stats, isRecording,
+  startRecording, stopRecording,
+  acceptCommit, rejectCommit,
+  acceptMutation, rejectMutation,
+  acceptAll, rejectAll,
+  acceptByType, rejectByType,
+  annotate, takeSnapshot,
+  filterByType, filterByStatus, search,
+  exportMarkdown, exportJSON, exportAgentBlock,
+  clear,
 } = useRewind()
 ```
 
 ## Props
 
 | Prop | Default | Description |
-|------|---------|-------------|
+| --- | --- | --- |
 | `recording` | `true` | Start recording on mount |
 | `position` | `'bottom'` | Panel: bottom, right, or left |
 | `panelSize` | `280` | Panel height/width in px |
 | `shortcut` | `'Alt+R'` | Keyboard toggle |
 | `commitWindow` | `500` | Group mutations within this ms |
-| `maxCommits` | `200` | Max commits to keep |
+| `maxCommits` | `200` | Max commits |
 | `ignoreSelectors` | `['[data-rewind-ui]']` | Selectors to ignore |
-| `zIndex` | `99999` | Z-index for panel |
+| `showOverlays` | `true` | Visual overlays on changed elements |
+| `zIndex` | `99999` | Z-index |
+| `persist` | `false` | Save session to localStorage |
+| `storageKey` | `'rewind-session'` | Storage key |
 | `onCommitAction` | - | Callback on accept/reject |
-| `onRecordingChange` | - | Callback on recording toggle |
-
-## How it works
-
-Rewind uses a MutationObserver on `document.body` with full configuration: attributes (with old value), childList, characterData (with old value), and subtree. Every mutation record is processed into a TrackedMutation with a unique CSS selector, before/after values, bounding box, and undo data.
-
-Mutations are buffered and flushed into commits after the commit window (500ms default). The store notifies subscribers via useSyncExternalStore for zero-lag React updates.
-
-Undo data varies by mutation type. For attributes, it stores the old value. For text, the old text content. For childList, it stores the HTML of removed nodes and the selectors of added nodes. On reject, the store walks the undo data in reverse order and attempts to restore the previous state.
-
-The observer ignores its own UI via the `[data-rewind-ui]` selector, and skips script/link/meta elements.
-
-Zero runtime dependencies. Works with React 18+.
+| `onRecordingChange` | - | Callback on toggle |
 
 ## Disclaimer
 
@@ -117,4 +106,4 @@ Experimental, open-source software provided as-is. No warranties, no guarantees.
 
 ## License
 
-MIT. Built by 0xDragoon.
+MIT. Built by [0xDragoon](https://github.com/dragoon0x).

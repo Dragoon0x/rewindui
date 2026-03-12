@@ -1,78 +1,35 @@
-import { useSyncExternalStore, useCallback } from 'react'
-import { getRewindStore } from '../components/Rewind'
-import type { TimelineState, Commit } from '../types'
+import { useState, useEffect, useSyncExternalStore } from 'react'
+import { getStore } from '../core/store'
+import type { TimelineState, TimelineStats, Commit } from '../types'
 
-/**
- * useRewind
- *
- * Programmatic access to the rewind timeline.
- *
- * ```tsx
- * const { state, acceptCommit, rejectCommit, exportMarkdown } = useRewind()
- * ```
- */
-export function useRewind() {
-  const store = getRewindStore()
-
-  const version = useSyncExternalStore(
-    store?.subscribe ?? (() => () => {}),
-    store?.getSnapshot ?? (() => 0)
-  )
-
-  // Force usage of version to keep subscription alive
+export function useRewind(opts?: { ignoreSelectors?: string[]; commitWindow?: number; maxCommits?: number; persistKey?: string }) {
+  const store = getStore(opts)
+  const version = useSyncExternalStore(store.subscribe.bind(store), store.getSnapshot.bind(store))
   void version
 
-  const state: TimelineState = store?.getState() ?? {
-    commits: [],
-    recording: false,
-    selectedCommitId: null,
-    selectedMutationId: null,
-    stats: { total: 0, pending: 0, accepted: 0, rejected: 0 },
-  }
-
-  const acceptCommit = useCallback((commitId: string) => {
-    store?.acceptCommit(commitId)
-  }, [store])
-
-  const rejectCommit = useCallback((commitId: string) => {
-    store?.rejectCommit(commitId)
-  }, [store])
-
-  const acceptMutation = useCallback((mutationId: string) => {
-    store?.acceptMutation(mutationId)
-  }, [store])
-
-  const rejectMutation = useCallback((mutationId: string) => {
-    store?.rejectMutation(mutationId)
-  }, [store])
-
-  const acceptAll = useCallback(() => {
-    store?.acceptAll()
-  }, [store])
-
-  const clear = useCallback(() => {
-    store?.clear()
-  }, [store])
-
-  const exportMarkdown = useCallback((): string => {
-    return store?.exportMarkdown() ?? ''
-  }, [store])
-
-  const exportJSON = useCallback((): string => {
-    return store?.exportJSON() ?? ''
-  }, [store])
-
   return {
-    state,
-    commits: state.commits,
-    stats: state.stats,
-    acceptCommit,
-    rejectCommit,
-    acceptMutation,
-    rejectMutation,
-    acceptAll,
-    clear,
-    exportMarkdown,
-    exportJSON,
+    state: store.getState(),
+    commits: store.getCommits(),
+    stats: store.getStats(),
+    isRecording: store.isRecording(),
+    startRecording: () => store.startRecording(),
+    stopRecording: () => store.stopRecording(),
+    acceptCommit: (id: string) => store.acceptCommit(id),
+    rejectCommit: (id: string) => store.rejectCommit(id),
+    acceptMutation: (cId: string, mId: string) => store.acceptMutation(cId, mId),
+    rejectMutation: (cId: string, mId: string) => store.rejectMutation(cId, mId),
+    acceptAll: () => store.acceptAll(),
+    rejectAll: () => store.rejectAll(),
+    acceptByType: (type: string) => store.acceptByType(type),
+    rejectByType: (type: string) => store.rejectByType(type),
+    annotate: (id: string, text: string) => store.annotate(id, text),
+    takeSnapshot: (label?: string) => store.takeSnapshot(label),
+    filterByType: (type: string) => store.filterByType(type),
+    filterByStatus: (status: any) => store.filterByStatus(status),
+    search: (query: string) => store.search(query),
+    exportMarkdown: () => store.exportMarkdown(),
+    exportJSON: () => store.exportJSON(),
+    exportAgentBlock: () => store.exportAgentBlock(),
+    clear: () => store.clear(),
   }
 }

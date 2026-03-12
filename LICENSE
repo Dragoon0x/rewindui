@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 0xDragoon
+Copyright (c) 2025 0xDragoon
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,15 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-ADDITIONAL DISCLAIMER:
-
-This is experimental software. Do your own research (DYOR) before using in
-any production environment. The author(s) make no representations regarding
-the suitability, reliability, availability, timeliness, or accuracy of this
-software for any purpose.
-
-Use of this software is entirely at your own risk. In no event shall the
-author(s) be held liable for any direct, indirect, incidental, special,
-exemplary, or consequential damages arising from or in connection with the
-use of this software.

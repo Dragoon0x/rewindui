@@ -1,15 +1,10 @@
 export { Rewind } from './components/Rewind'
 export { useRewind } from './hooks/useRewind'
-export { TimelineStore } from './core/timeline'
-export { DOMObserver } from './core/observer'
+export { TimelineStore, getStore, resetStore } from './core/store'
+export { Observer, getSelector, getShortSelector } from './core/observer'
+export { REWIND_COLORS } from './types'
 
 export type {
-  RewindProps,
-  TrackedMutation,
-  MutationKind,
-  Commit,
-  TimelineState,
-  UndoData,
+  MutationType, CommitStatus, TrackedMutation, UndoData,
+  Commit, Snapshot, TimelineState, TimelineStats, RewindProps,
 } from './types'
-
-export { REWIND_COLORS } from './types'

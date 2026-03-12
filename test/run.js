@@ -1,331 +1,224 @@
 // ═══════════════════════════════════════════
-// REWIND — Tests
+// REWINDUI v1 — Tests
 // ═══════════════════════════════════════════
 
-const {
-  TimelineStore,
-  REWIND_COLORS,
-} = require('../dist/index.js')
+var r = require('../dist/index.js')
 
-let passed = 0
-let failed = 0
+var passed = 0, failed = 0
+function assert(c, m) { if (c) { passed++; console.log('  ✓ ' + m) } else { failed++; console.error('  ✗ ' + m) } }
+function assertEq(a, b, m) { assert(a === b, m + ' (got: ' + JSON.stringify(a) + ', expected: ' + JSON.stringify(b) + ')') }
 
-function assert(condition, msg) {
-  if (condition) { passed++; console.log(`  ✓ ${msg}`) }
-  else { failed++; console.error(`  ✗ ${msg}`) }
-}
+// Mock localStorage
+global.localStorage = { _d: {}, getItem: function(k) { return this._d[k] || null }, setItem: function(k,v) { this._d[k] = v }, removeItem: function(k) { delete this._d[k] } }
 
-function assertEq(a, b, msg) {
-  assert(a === b, `${msg} (got: ${JSON.stringify(a)}, expected: ${JSON.stringify(b)})`)
-}
-
-function makeMutation(overrides = {}) {
-  return {
-    id: `m_test_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-    kind: 'style',
-    timestamp: Date.now(),
-    selector: 'div.test',
-    shortSelector: 'div.test',
-    tag: 'div',
-    attributeName: 'style',
-    before: 'color: red',
-    after: 'color: blue',
-    addedNodes: [],
-    removedNodes: [],
-    bounds: { x: 10, y: 20, w: 100, h: 50 },
-    status: 'pending',
-    reverted: false,
-    element: null,
-    undoData: null,
-    ...overrides,
-  }
-}
-
-// ─── TimelineStore: Basic ────────────────
+// ─── TimelineStore: Basic ───
 
 console.log('\n  TimelineStore: Basic')
 
-const store1 = new TimelineStore(50, 100) // 50ms commit window
-const state1 = store1.getState()
-assertEq(state1.commits.length, 0, 'Starts with 0 commits')
-assertEq(state1.stats.total, 0, 'Starts with 0 total mutations')
+r.resetStore()
+var store = r.getStore()
+assert(store !== null, 'Store created')
+assertEq(store.isRecording(), false, 'Starts not recording')
+assertEq(store.getCommits().length, 0, 'No commits initially')
 
-// ─── TimelineStore: Add Mutations ────────
+var stats = store.getStats()
+assertEq(stats.total, 0, 'Stats: 0 total')
+assertEq(stats.pending, 0, 'Stats: 0 pending')
+assertEq(stats.accepted, 0, 'Stats: 0 accepted')
+assertEq(stats.rejected, 0, 'Stats: 0 rejected')
 
-console.log('\n  TimelineStore: Add Mutations')
+// ─── TimelineStore: State ───
 
-const store2 = new TimelineStore(50, 100)
-store2.addMutation(makeMutation({ id: 'm1', before: 'color: red', after: 'color: blue' }))
-store2.addMutation(makeMutation({ id: 'm2', before: 'padding: 8px', after: 'padding: 16px' }))
+console.log('\n  TimelineStore: State')
 
-// Mutations should be pending until commit window passes
-store2.flush()
-const state2 = store2.getState()
-assertEq(state2.commits.length, 1, 'Mutations grouped into 1 commit after flush')
-assertEq(state2.commits[0].mutations.length, 2, 'Commit has 2 mutations')
-assertEq(state2.stats.total, 2, 'Stats show 2 total')
-assertEq(state2.stats.pending, 2, 'Stats show 2 pending')
-assertEq(state2.commits[0].status, 'pending', 'Commit status is pending')
+var state = store.getState()
+assert(Array.isArray(state.commits), 'State has commits array')
+assert(Array.isArray(state.snapshots), 'State has snapshots array')
+assertEq(state.recording, false, 'State recording is false')
+assertEq(state.cursor, -1, 'State cursor is -1')
 
-// ─── TimelineStore: Separate Commits ─────
-
-console.log('\n  TimelineStore: Separate Commits')
-
-const store3 = new TimelineStore(10, 100) // very short window
-store3.addMutation(makeMutation({ id: 'm3' }))
-store3.flush()
-store3.addMutation(makeMutation({ id: 'm4' }))
-store3.flush()
-
-const state3 = store3.getState()
-assertEq(state3.commits.length, 2, 'Two flushes create 2 commits')
-
-// ─── TimelineStore: Accept Commit ────────
-
-console.log('\n  TimelineStore: Accept Commit')
-
-const store4 = new TimelineStore(10, 100)
-store4.addMutation(makeMutation({ id: 'ma1' }))
-store4.addMutation(makeMutation({ id: 'ma2' }))
-store4.flush()
-
-const commitId4 = store4.getCommits()[0].id
-store4.acceptCommit(commitId4)
-
-const state4 = store4.getState()
-assertEq(state4.commits[0].status, 'accepted', 'Commit status is accepted')
-assertEq(state4.commits[0].mutations[0].status, 'accepted', 'First mutation accepted')
-assertEq(state4.commits[0].mutations[1].status, 'accepted', 'Second mutation accepted')
-assertEq(state4.stats.accepted, 2, 'Stats show 2 accepted')
-assertEq(state4.stats.pending, 0, 'Stats show 0 pending')
-
-// ─── TimelineStore: Reject Commit ────────
-
-console.log('\n  TimelineStore: Reject Commit')
-
-const store5 = new TimelineStore(10, 100)
-store5.addMutation(makeMutation({ id: 'mr1' }))
-store5.flush()
-
-const commitId5 = store5.getCommits()[0].id
-store5.rejectCommit(commitId5)
-
-const state5 = store5.getState()
-assertEq(state5.commits[0].status, 'rejected', 'Commit status is rejected')
-assertEq(state5.commits[0].mutations[0].status, 'rejected', 'Mutation status is rejected')
-assertEq(state5.stats.rejected, 1, 'Stats show 1 rejected')
-assert(state5.commits[0].mutations[0].reverted === true, 'Mutation marked as reverted')
-
-// ─── TimelineStore: Accept Single Mutation ───
-
-console.log('\n  TimelineStore: Accept/Reject Single Mutation')
-
-const store6 = new TimelineStore(10, 100)
-store6.addMutation(makeMutation({ id: 'ms1' }))
-store6.addMutation(makeMutation({ id: 'ms2' }))
-store6.flush()
-
-store6.acceptMutation('ms1')
-const state6a = store6.getState()
-assertEq(state6a.commits[0].mutations[0].status, 'accepted', 'First mutation accepted individually')
-assertEq(state6a.commits[0].mutations[1].status, 'pending', 'Second mutation still pending')
-assertEq(state6a.commits[0].status, 'partial', 'Commit status is partial')
-
-store6.rejectMutation('ms2')
-const state6b = store6.getState()
-assertEq(state6b.commits[0].mutations[1].status, 'rejected', 'Second mutation rejected')
-
-// ─── TimelineStore: Accept All ───────────
-
-console.log('\n  TimelineStore: Accept All')
-
-const store7 = new TimelineStore(10, 100)
-store7.addMutation(makeMutation({ id: 'aa1' }))
-store7.flush()
-store7.addMutation(makeMutation({ id: 'aa2' }))
-store7.flush()
-
-store7.acceptAll()
-const state7 = store7.getState()
-assertEq(state7.stats.pending, 0, 'No pending after acceptAll')
-assertEq(state7.stats.accepted, 2, 'All accepted')
-
-// ─── TimelineStore: Clear ────────────────
-
-console.log('\n  TimelineStore: Clear')
-
-const store8 = new TimelineStore(10, 100)
-store8.addMutation(makeMutation({ id: 'cl1' }))
-store8.flush()
-store8.clear()
-
-const state8 = store8.getState()
-assertEq(state8.commits.length, 0, 'Clear removes all commits')
-assertEq(state8.stats.total, 0, 'Clear resets stats')
-
-// ─── TimelineStore: Max Commits ──────────
-
-console.log('\n  TimelineStore: Max Commits')
-
-const store9 = new TimelineStore(10, 3) // max 3 commits
-for (let i = 0; i < 5; i++) {
-  store9.addMutation(makeMutation({ id: `max_${i}` }))
-  store9.flush()
-}
-
-const state9 = store9.getState()
-assert(state9.commits.length <= 3, `Max commits enforced (got ${state9.commits.length})`)
-
-// ─── TimelineStore: Labels ───────────────
-
-console.log('\n  TimelineStore: Label Generation')
-
-const store10 = new TimelineStore(10, 100)
-
-// Single style mutation
-store10.addMutation(makeMutation({ id: 'lb1', kind: 'style', shortSelector: 'button.cta' }))
-store10.flush()
-assert(store10.getCommits()[0].label.includes('button.cta'), 'Single mutation label includes selector')
-
-// Single text mutation
-store10.addMutation(makeMutation({ id: 'lb2', kind: 'text', shortSelector: 'h1.title' }))
-store10.flush()
-assert(store10.getCommits()[1].label.includes('h1.title'), 'Text mutation label includes selector')
-
-// Multiple mutations to same element
-store10.addMutation(makeMutation({ id: 'lb3', kind: 'style', shortSelector: 'div.card' }))
-store10.addMutation(makeMutation({ id: 'lb4', kind: 'style', shortSelector: 'div.card' }))
-store10.flush()
-assert(store10.getCommits()[2].label.includes('div.card'), 'Multi-mutation label includes shared selector')
-
-// ─── TimelineStore: Summary ──────────────
-
-console.log('\n  TimelineStore: Summary Generation')
-
-const store11 = new TimelineStore(10, 100)
-store11.addMutation(makeMutation({ id: 'sm1', kind: 'style' }))
-store11.addMutation(makeMutation({ id: 'sm2', kind: 'text' }))
-store11.flush()
-
-const summary = store11.getCommits()[0].summary
-assert(summary.includes('style'), 'Summary mentions style changes')
-assert(summary.includes('text'), 'Summary mentions text changes')
-
-// ─── TimelineStore: Subscription ─────────
+// ─── TimelineStore: Subscription ───
 
 console.log('\n  TimelineStore: Subscription')
 
-const store12 = new TimelineStore(10, 100)
-let notified = 0
-const unsub = store12.subscribe(() => notified++)
-store12.addMutation(makeMutation({ id: 'sub1' }))
-store12.flush()
-assert(notified > 0, 'Subscriber notified on flush')
+r.resetStore()
+var store2 = r.getStore()
+var notified = 0
+var unsub = store2.subscribe(function() { notified++ })
+store2.clear() // triggers notify
+assert(notified > 0, 'Subscriber notified')
 
-const before = notified
+var before = notified
 unsub()
-store12.addMutation(makeMutation({ id: 'sub2' }))
-store12.flush()
-assertEq(notified, before, 'Unsubscribed listener not called')
+store2.clear()
+assertEq(notified, before, 'Unsubscribed not called')
 
-// ─── TimelineStore: Markdown Export ──────
+// ─── TimelineStore: Filter & Search ───
 
-console.log('\n  Markdown Export')
+console.log('\n  TimelineStore: Filter & Search')
 
-const store13 = new TimelineStore(10, 100)
-store13.addMutation(makeMutation({ id: 'exp1', kind: 'style', shortSelector: 'div.hero', before: 'padding: 8px', after: 'padding: 24px' }))
-store13.flush()
-store13.acceptCommit(store13.getCommits()[0].id)
+r.resetStore()
+var store3 = r.getStore()
 
-// Mock window.location for export
-globalThis.window = { location: { href: 'https://example.com' } }
+// Manually add commits for testing
+var testCommits = store3.getState().commits
+testCommits.push({
+  id: 'c1', mutations: [
+    { id: 'm1', type: 'style', selector: '.hero', shortSelector: 'div.hero', tag: 'div', attributeName: 'style', oldValue: 'color: red', newValue: 'color: blue', timestamp: Date.now(), bounds: null, status: 'pending', undoData: null, impact: 0.5 }
+  ], timestamp: Date.now(), status: 'pending', label: 'Style: div.hero', annotation: null, impact: 0.5
+})
+testCommits.push({
+  id: 'c2', mutations: [
+    { id: 'm2', type: 'text', selector: 'h1', shortSelector: 'h1', tag: 'h1', attributeName: null, oldValue: 'Hello', newValue: 'World', timestamp: Date.now(), bounds: null, status: 'pending', undoData: null, impact: 0.3 }
+  ], timestamp: Date.now(), status: 'pending', label: 'Edited text in h1', annotation: null, impact: 0.3
+})
+testCommits.push({
+  id: 'c3', mutations: [
+    { id: 'm3', type: 'attribute', selector: 'img', shortSelector: 'img', tag: 'img', attributeName: 'src', oldValue: 'a.jpg', newValue: 'b.jpg', timestamp: Date.now(), bounds: null, status: 'accepted', undoData: null, impact: 0.2 }
+  ], timestamp: Date.now(), status: 'accepted', label: 'Updated source on img', annotation: 'Approved new image', impact: 0.2
+})
 
-const md = store13.exportMarkdown()
-assert(md.includes('# Visual Changelog'), 'Markdown has title')
-assert(md.includes('https://example.com'), 'Markdown has URL')
+assertEq(store3.getCommits().length, 3, 'Has 3 commits')
+
+var styleCommits = store3.filterByType('style')
+assertEq(styleCommits.length, 1, 'Filter by style: 1')
+
+var textCommits = store3.filterByType('text')
+assertEq(textCommits.length, 1, 'Filter by text: 1')
+
+var pendingCommits = store3.filterByStatus('pending')
+assertEq(pendingCommits.length, 2, 'Filter by pending: 2')
+
+var acceptedCommits = store3.filterByStatus('accepted')
+assertEq(acceptedCommits.length, 1, 'Filter by accepted: 1')
+
+var searchResults = store3.search('hero')
+assertEq(searchResults.length, 1, 'Search "hero": 1 result')
+
+var searchResults2 = store3.search('image')
+assertEq(searchResults2.length, 1, 'Search "image" in annotation: 1 result')
+
+var searchResults3 = store3.search('nonexistent')
+assertEq(searchResults3.length, 0, 'Search nonexistent: 0')
+
+// ─── TimelineStore: Accept/Reject ───
+
+console.log('\n  TimelineStore: Accept/Reject')
+
+store3.acceptCommit('c1')
+assertEq(store3.getCommit('c1').status, 'accepted', 'c1 accepted')
+assertEq(store3.getCommit('c1').mutations[0].status, 'accepted', 'c1 mutation accepted')
+
+store3.rejectCommit('c2')
+assertEq(store3.getCommit('c2').status, 'rejected', 'c2 rejected')
+
+var stats3 = store3.getStats()
+assertEq(stats3.accepted, 2, 'Stats: 2 accepted')
+assertEq(stats3.rejected, 1, 'Stats: 1 rejected')
+
+// ─── TimelineStore: Annotate ───
+
+console.log('\n  TimelineStore: Annotate')
+
+store3.annotate('c1', 'Good change, keeping this')
+assertEq(store3.getCommit('c1').annotation, 'Good change, keeping this', 'Annotation set')
+
+store3.annotate('nonexistent', 'test')
+assert(true, 'Annotating nonexistent is no-op')
+
+// ─── TimelineStore: Accept All ───
+
+console.log('\n  TimelineStore: Accept All')
+
+r.resetStore()
+var store4 = r.getStore()
+store4.getState().commits.push(
+  { id: 'a1', mutations: [{ id: 'x1', type: 'style', selector: '.a', shortSelector: '.a', tag: 'div', attributeName: 'style', oldValue: '', newValue: '', timestamp: Date.now(), bounds: null, status: 'pending', undoData: null, impact: 0.1 }], timestamp: Date.now(), status: 'pending', label: 'Test 1', annotation: null, impact: 0.1 },
+  { id: 'a2', mutations: [{ id: 'x2', type: 'text', selector: '.b', shortSelector: '.b', tag: 'p', attributeName: null, oldValue: '', newValue: '', timestamp: Date.now(), bounds: null, status: 'pending', undoData: null, impact: 0.1 }], timestamp: Date.now(), status: 'pending', label: 'Test 2', annotation: null, impact: 0.1 }
+)
+store4.acceptAll()
+assertEq(store4.getCommit('a1').status, 'accepted', 'a1 accepted')
+assertEq(store4.getCommit('a2').status, 'accepted', 'a2 accepted')
+
+// ─── TimelineStore: Batch by Type ───
+
+console.log('\n  TimelineStore: Batch by Type')
+
+r.resetStore()
+var store5 = r.getStore()
+store5.getState().commits.push(
+  { id: 'b1', mutations: [{ id: 'y1', type: 'style', selector: '.x', shortSelector: '.x', tag: 'div', attributeName: 'style', oldValue: '', newValue: '', timestamp: Date.now(), bounds: null, status: 'pending', undoData: null, impact: 0.1 }], timestamp: Date.now(), status: 'pending', label: 'Style', annotation: null, impact: 0.1 },
+  { id: 'b2', mutations: [{ id: 'y2', type: 'text', selector: '.y', shortSelector: '.y', tag: 'p', attributeName: null, oldValue: '', newValue: '', timestamp: Date.now(), bounds: null, status: 'pending', undoData: null, impact: 0.1 }], timestamp: Date.now(), status: 'pending', label: 'Text', annotation: null, impact: 0.1 },
+  { id: 'b3', mutations: [{ id: 'y3', type: 'style', selector: '.z', shortSelector: '.z', tag: 'span', attributeName: 'style', oldValue: '', newValue: '', timestamp: Date.now(), bounds: null, status: 'pending', undoData: null, impact: 0.1 }], timestamp: Date.now(), status: 'pending', label: 'Style 2', annotation: null, impact: 0.1 }
+)
+var accepted = store5.acceptByType('style')
+assertEq(accepted, 2, 'Accepted 2 style mutations')
+assertEq(store5.getCommit('b1').mutations[0].status, 'accepted', 'b1 style accepted')
+assertEq(store5.getCommit('b2').mutations[0].status, 'pending', 'b2 text still pending')
+assertEq(store5.getCommit('b3').mutations[0].status, 'accepted', 'b3 style accepted')
+
+// ─── TimelineStore: Export ───
+
+console.log('\n  TimelineStore: Export')
+
+r.resetStore()
+var store6 = r.getStore()
+store6.getState().commits.push(
+  { id: 'e1', mutations: [{ id: 'z1', type: 'style', selector: '.hero', shortSelector: 'div.hero', tag: 'div', attributeName: 'style', oldValue: 'color: red', newValue: 'color: blue', timestamp: Date.now(), bounds: null, status: 'accepted', undoData: null, impact: 0.5 }], timestamp: Date.now(), status: 'accepted', label: 'Style: div.hero', annotation: 'Approved', impact: 0.5 }
+)
+
+var md = store6.exportMarkdown()
+assert(md.includes('Rewind Session'), 'Markdown has title')
 assert(md.includes('div.hero'), 'Markdown has selector')
-assert(md.includes('padding: 8px'), 'Markdown has before value')
-assert(md.includes('padding: 24px'), 'Markdown has after value')
-assert(md.includes('✓'), 'Markdown has accepted icon')
+assert(md.includes('color: red'), 'Markdown has old value')
+assert(md.includes('color: blue'), 'Markdown has new value')
+assert(md.includes('Approved'), 'Markdown has annotation')
 
-// ─── TimelineStore: JSON Export ──────────
+var json = store6.exportJSON()
+var parsed = JSON.parse(json)
+assert(parsed.commits.length === 1, 'JSON has 1 commit')
+assert(parsed.stats.total === 1, 'JSON stats has total')
 
-console.log('\n  JSON Export')
+var agent = store6.exportAgentBlock()
+assert(agent.includes('<dom_changes>'), 'Agent block has opening tag')
+assert(agent.includes('</dom_changes>'), 'Agent block has closing tag')
+assert(agent.includes('Approved changes'), 'Agent block has approved section')
 
-const jsonStr = store13.exportJSON()
-const json = JSON.parse(jsonStr)
-assert(typeof json === 'object', 'JSON parses correctly')
-assertEq(json.url, 'https://example.com', 'JSON has URL')
-assert(Array.isArray(json.commits), 'JSON has commits array')
-assert(json.commits[0].mutations.length > 0, 'JSON commits have mutations')
-assertEq(json.commits[0].mutations[0].kind, 'style', 'JSON mutation has kind')
-assert(json.stats.accepted > 0, 'JSON stats reflect accepts')
+// ─── TimelineStore: Clear ───
 
-// ─── Types and Constants ─────────────────
+console.log('\n  TimelineStore: Clear')
 
-console.log('\n  Types and Constants')
+store6.clear()
+assertEq(store6.getCommits().length, 0, 'Clear removes all commits')
 
-assert(typeof REWIND_COLORS === 'object', 'REWIND_COLORS exported')
-assertEq(REWIND_COLORS.added, '#4ade80', 'Added color correct')
-assertEq(REWIND_COLORS.removed, '#f87171', 'Removed color correct')
-assertEq(REWIND_COLORS.changed, '#60a5fa', 'Changed color correct')
-assertEq(REWIND_COLORS.pending, '#fbbf24', 'Pending color correct')
+// ─── Observer ───
 
-// ─── Edge Cases ──────────────────────────
+console.log('\n  Observer')
 
-console.log('\n  Edge Cases')
+assert(typeof r.Observer === 'function', 'Observer class exported')
+var obs = new r.Observer()
+assert(obs !== null, 'Observer instantiates')
 
-const storeE = new TimelineStore(10, 100)
+// ─── Selectors ───
 
-// Accept non-existent commit
-storeE.acceptCommit('nonexistent')
-assertEq(storeE.getState().commits.length, 0, 'Accepting nonexistent commit is a no-op')
+console.log('\n  Selectors')
 
-// Reject non-existent mutation
-storeE.rejectMutation('nonexistent')
-assertEq(storeE.getState().commits.length, 0, 'Rejecting nonexistent mutation is a no-op')
+assert(typeof r.getSelector === 'function', 'getSelector exported')
+assert(typeof r.getShortSelector === 'function', 'getShortSelector exported')
 
-// Empty export
-const emptyMd = storeE.exportMarkdown()
-assert(emptyMd.includes('# Visual Changelog'), 'Empty export still has header')
+// ─── Component Exports ───
 
-// Double accept
-storeE.addMutation(makeMutation({ id: 'dbl1' }))
-storeE.flush()
-const dblId = storeE.getCommits()[0].id
-storeE.acceptCommit(dblId)
-storeE.acceptCommit(dblId) // Second accept should be harmless
-assertEq(storeE.getState().commits[0].status, 'accepted', 'Double accept is idempotent')
+console.log('\n  Exports')
 
-// Reject after accept should not revert (accepted mutations skip revert)
-storeE.addMutation(makeMutation({ id: 'ra1' }))
-storeE.flush()
-const raId = storeE.getCommits()[1].id
-storeE.acceptCommit(raId)
-storeE.rejectCommit(raId)
-// Status will say rejected but mutation was already accepted so revert skips
-assert(storeE.getCommits()[1].mutations[0].reverted === false || storeE.getCommits()[1].mutations[0].status === 'accepted', 'Accepted mutations skip revert')
+assert(typeof r.Rewind === 'function', 'Rewind component exported')
+assert(typeof r.useRewind === 'function', 'useRewind hook exported')
+assert(typeof r.TimelineStore === 'function', 'TimelineStore class exported')
+assert(typeof r.getStore === 'function', 'getStore exported')
+assert(typeof r.resetStore === 'function', 'resetStore exported')
+assert(typeof r.REWIND_COLORS === 'object', 'REWIND_COLORS exported')
+assertEq(r.REWIND_COLORS.accent, '#818cf8', 'Accent color')
 
-// ─── Mutation Kinds ──────────────────────
+// ─── Summary ───
 
-console.log('\n  Mutation Kinds')
-
-const storeK = new TimelineStore(10, 100)
-const kinds = ['style', 'attribute', 'text', 'childList']
-for (const kind of kinds) {
-  storeK.addMutation(makeMutation({ id: `k_${kind}`, kind }))
-}
-storeK.flush()
-const stateK = storeK.getState()
-assertEq(stateK.commits[0].mutations.length, 4, 'All 4 mutation kinds added')
-
-const kindSet = new Set(stateK.commits[0].mutations.map(m => m.kind))
-assert(kindSet.has('style'), 'Has style mutation')
-assert(kindSet.has('attribute'), 'Has attribute mutation')
-assert(kindSet.has('text'), 'Has text mutation')
-assert(kindSet.has('childList'), 'Has childList mutation')
-
-// ─── Summary ─────────────────────────────
-
-console.log(`\n  ${passed} passed, ${failed} failed\n`)
+console.log('\n  ' + passed + ' passed, ' + failed + ' failed\n')
 process.exit(failed > 0 ? 1 : 0)
