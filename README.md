@@ -5,7 +5,7 @@
 Visual changelog for AI agent edits. Git blame for the visual layer.
 
 ```
-npm install rewindui
+npm install userewindui
 ```
 
 Your AI agent just rewrote half a component. What actually changed? What broke? Rewind watches every DOM mutation in real-time, groups them into commits, shows before/after diffs, and lets you accept or reject each change individually. Reject reverts the DOM. Accept marks it done. Export the full changelog as markdown for your agent.
@@ -13,7 +13,7 @@ Your AI agent just rewrote half a component. What actually changed? What broke? 
 ## Quick start
 
 ```jsx
-import { Rewind } from 'rewindui'
+import { Rewind } from 'userewindui'
 
 function App() {
   return (
@@ -55,7 +55,7 @@ Undo is best-effort. If the element has been removed from the DOM since the muta
 
 One click exports the full session as structured markdown or JSON. The output includes every commit, every mutation with selectors, before/after values, and accept/reject status.
 
-```markdown
+```
 ## ✓ Style: button.primary (2:14:32 PM)
 
 ### ✓ `button.primary` — style
@@ -69,7 +69,7 @@ Paste the export into your agent to explain what was approved and what needs to 
 ## Programmatic API
 
 ```jsx
-import { useRewind } from 'rewindui'
+import { useRewind } from 'userewindui'
 
 const {
   state,        // Full timeline state
@@ -87,7 +87,7 @@ const {
 ## Props
 
 | Prop | Default | Description |
-|------|---------|-------------|
+| --- | --- | --- |
 | `recording` | `true` | Start recording on mount |
 | `position` | `'bottom'` | Panel: bottom, right, or left |
 | `panelSize` | `280` | Panel height/width in px |
@@ -117,4 +117,4 @@ Experimental, open-source software provided as-is. No warranties, no guarantees.
 
 ## License
 
-MIT. Built by 0xDragoon.
+MIT. Built by [0xDragoon](https://github.com/dragoon0x).
